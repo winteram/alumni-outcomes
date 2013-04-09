@@ -1,0 +1,45 @@
+<html>
+<head>
+	<title>Alumni Outcomes</title>
+	<link type="text/css" rel="stylesheet" href="/css/main.css" />
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+	<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/jquery-ui.min.js"></script>
+	<script src="/js/alumni.js"></script>
+	<script language="javascript" type="text/javascript"> window.onload=initAlumni(); </script>
+</head>
+<body>
+	<div id='top-sec'>
+		<div id='main-title'>Alumni Outcomes</div>
+		<div id='description'>
+			The purpose of this app is to determine what jobs alumni from a university eventually obtained.  The user uploads a list of names and specifies a school they graduated from, and the app uses the LinkedIn API to find matching profiles.
+		</div>
+		<div id='new-or-old'>
+			<div><input type="radio" checked="checked" name="noo-radio" value="new" /> Start New Template </div>
+			<div><input type="radio" name="noo-radio" value="old" /> Load Template </div>
+		</div>
+		<div id='new-template'>
+			<span>Input Job Name:</span><span><input type='text' name='template-name' /></span>
+			<span>Input File: <input type='text' name='input-file-name'>
+				<input type='button' name='upload-button' value='Upload'>
+			</span>
+			<span>Input School Name:</span><span><input type='text' name='school-name' /></span>
+			<div><input type='button' name='create-button' value='Begin' /></div>
+		</div>
+		<div id='load-template'></div>
+	</div>
+	<div id='bottom-sec'>
+		<div id='loaded-template-name'></div>
+		<div id="progressbar"><div class="progress-label">Loading...</div></div>
+		<div id='percent-match' class'd3vis'>
+		</div>
+		<div id='regions' class='d3vis'>
+		</div>
+		<div id='countries' class='d3vis'>
+		</div>
+		<div id='industries' class='d3vis'>
+		</div>
+		<div id='titles' class='d3vis'>
+		</div>
+	</div>
+</body>
+</html>

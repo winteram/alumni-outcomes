@@ -1,0 +1,54 @@
+body
+{	
+	font-family: Verdana, Helvetica, sans-serif;
+	background-color: #DDDDDD;
+}
+
+#top-sec
+{
+
+}
+
+#main-title
+{
+	font-size: 18px;
+}
+
+#description
+{
+	font-family: 'Arial',sans-serif;
+}
+
+#new-or-old
+{
+
+}
+
+#new-template
+{
+
+}
+
+#load-template
+{
+
+}
+
+#bottom-sec
+{
+	display: none;
+}
+
+#loaded-template-name
+{
+	display: none;
+}
+
+.progress-label 
+{
+    float: left;
+    margin-left: 50%;
+    margin-top: 5px;
+    font-weight: bold;
+    text-shadow: 1px 1px 0 #fff;
+ }
