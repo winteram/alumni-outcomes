@@ -40,6 +40,7 @@ class Template(db.Model):
 	short = db.StringProperty()
 	school = db.StringProperty()
 	person_file = db.Text()
+	N = db.IntegerProperty()
 	created = db.DateTimeProperty(auto_now_add=True)
 
 # people crawled / to be crawled
@@ -75,6 +76,8 @@ class MainPage(webapp2.RequestHandler):
 		oldchecked = ''
 		newhidden = ''
 		oldhidden = 'style="display:none"'
+		begindisabled = ''
+		loaded_template = ''
 
 		# if error 
 		ecode = self.request.get('ecode')
@@ -91,6 +94,8 @@ class MainPage(webapp2.RequestHandler):
 			newhidden = 'style="display:none"'
 			oldhidden = ''
 			fileloaded = 'true'
+			begindisabled = 'disabled="disabled"'
+			loaded_template = self.request.get('loaded')
 
 		# if returning from OAuth
 		crawled = self.request.get('crawled')
@@ -101,22 +106,24 @@ class MainPage(webapp2.RequestHandler):
 		# if receiving ~~mystery delete query~~
 		clearall = self.request.get('obliterate')
 		if clearall:
-			template_q = db.GqlQuery("SELECT * FROM Template WHERE ANCESTOR IS :1",template_key())
-			for template in template_q:
+			template_q = Template.all()
+			for template in template_q.run():
 				template.delete()
 
-			person_q = db.GqlQuery("SELECT * FROM Person WHERE ANCESTOR IS :1",person_key())
-			for person in person_q:
+			person_q = Person.all()
+			for person in person_q.run():
 				person.delete()
 
-			position_q = db.GqlQuery("SELECT * FROM Position WHERE ANCESTOR IS :1",position_key())
-			for position in position_q:
+			position_q = Position.all()
+			for position in position_q.run():
 				position.delete()
+
+			return self.redirect('/')
 
 		templates = []
 		template_q = db.GqlQuery("SELECT * FROM Template WHERE ANCESTOR IS :1",template_key())
 		for template in template_q:
-			temp = {'name':template.name,'short':template.short}
+			temp = {'name':template.name,'short':template.short,'N':template.N}
 			templates.append(temp)
 
 		template_values = {
@@ -126,13 +133,15 @@ class MainPage(webapp2.RequestHandler):
 			'newhidden': newhidden,
 			'oldhidden': oldhidden,
 			'fileloaded': fileloaded,
+			'begindisabled': begindisabled,
 			'crawled': is_crawled,
 			'todisable': len(templates) == 0 and 'disabled="disabled"' or '',
+			'loaded-template': loaded_template,
 			'templates': templates
 		}
 
 		template = jinja_environment.get_template('index.html')
-		self.response.out.write(template.render(template_values))
+		return self.response.out.write(template.render(template_values))
 
 class LoadContent(webapp2.RequestHandler):
 	def post(self):
@@ -155,22 +164,44 @@ class LoadContent(webapp2.RequestHandler):
 			template.short = re.sub('[^a-z0-9]','',template_name.lower())
 			template.school = re.sub('[^A-Za-z0-9]','',self.request.get('school-name'))
 			template.person_file = self.request.get('template-file')
+			template.N = len(re.split('[\r\n]',template.person_file))
 			template.put()
+			logging.info("New template: " + template.short)
+			return self.redirect('/?loadfile=True&loaded=' + template.name)
 
-			# input lines of file into template
-			for line in template.person_file.split('\n'):
-				alum_input = line.split(',')
-				if len(alum_input) < 2 or len(alum_input) > 3:
-					continue
+		if func == 'parsefile':
+			response = {'offset':0,'complete':'false'}
+			# check template name doesn't already exist.
+			template_name = self.request.get('template-name')
+			template_q = db.GqlQuery("SELECT * FROM Template WHERE name=:1",template_name)
+			template = template_q.get()
+			if template:
+				# input lines of file into template
+				alums = re.split('[\r\n]',template.person_file)
+				response['N'] = len(alums)
+				offset = self.request.get('offset')
+				response['offset'] = offset + self.request.get('limit')
+				if response['offset'] > len(alums):
+					response['offset'] = len(alums)
+					response['complete'] = 'true'
 
-				lname_group = re.search('[A-Z][a-z]+',alum[0])
-				fname_group = re.search('[A-Z][a-z]+',alum[1])
-				alum = Person(parent=template)
-				alum.first_name = fname_group.group(0)
-				alum.last_name = lname_group.group(0)
-				alum.put()
+				logging.info('Parsing lines ' + str(offset) + ' to ' + str(response['offset']))
+				for line in alums[offset:response['offset']]:
+					alum_input = line.split(',')
+					if len(alum_input) < 2 or len(alum_input) > 3:
+						logging.error("Bad length")
+						continue
 
-			return self.redirect('/?loadfile=True')
+					lname_group = re.search('[A-Za-z]+',alum_input[0])
+					fname_group = re.search('[A-Z][a-z]+',alum_input[1])
+					alum = Person(parent=template)
+					alum.first_name = fname_group.group(0)
+					alum.last_name = lname_group.group(0)
+					#logging.info("New alum: " + alum.last_name)
+					alum.put()
+				self.response.out.write(json.dumps(response))
+
+			
 
 class InitOAuth(webapp2.RequestHandler):
 	def post(self):
@@ -226,16 +257,18 @@ class DoCrawl(webapp2.RequestHandler):
 		else:
 			return self.response.out.write("ERR 400 Template session error, DoCrawl")
 
+		logging.info("Template loaded:" + t_exists.short)
 		user_q = db.GqlQuery("SELECT * FROM User WHERE userid=:1",session['uid'])
 		user = user_q.get()
 		if user:
 			# iterate through people in Template
 			person_q = Person.all()
-			person_q.filter("is_crawled =",0)
+			#person_q.filter("is_crawled =",0)
 			person_q.ancestor(t_exists)
 			npeople = int(self.request.get('limit')) or 10
 			for person in person_q.run(limit=npeople):
 				params = {'first-name':person.first_name,'last-name':person.last_name,'school-name':school}
+				logging.info("Alum loaded: " + person.last_name)
 				self.response.out.write(person.last_name)
 				# request_url = "http://api.linkedin.com/v1/people-search"
 				# result = client.make_request(url=request_url, 

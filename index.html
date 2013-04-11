@@ -35,10 +35,10 @@
 				<form id='load-template-form' action='/initoauth' method="post">
 					<select id='template-to-load' name='template-to-load'>
 						{% for template in templates %}
-						<option value={{ template.short }}>{{ template.name }}</option>
+						<option value={{ template.short }} {% if template.short==loaded-template %} selected="selected" {% endif %}> {{ template.name }}: {{ template.N }} alumni</option>
 						{% endfor %}
 					</select>
-					<input type="submit" name="crawl" value="Begin" />
+					<input type="submit" name="crawl" value="Begin" {{ begindisabled }}/>
 				</form>
 			</div>
 		</div>

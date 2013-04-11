@@ -1,11 +1,42 @@
 function initAlumni(fileloaded,crawled)
 {
   console.log('initAlumni called: ' + fileloaded + "," + crawled);
+  if( fileloaded==true)
+  {
+    var progressbar = $( "#progressbar" ), progressLabel = $( ".progress-label" );
+    progressbar.progressbar({
+      value: false,
+      change: function() {
+        progressLabel.text( progressbar.progressbar( "value" ) + "%" );
+      },
+      complete: function() {
+        progressLabel.text( "Complete!" );
+      }
+    });
+    parseFile();
+  }
   if( crawled==true)
   {
     console.log('Begin crawl');
     doCrawl();
   }
+}
+
+function parseFile(offset=0)
+{
+  $.post('/extras',{'func':'parsefile','limit':100,'offset':offset},function(data) {
+    if (data.hasOwnProperty('complete')) { 
+      var progressbar = $( "#progressbar" ), progressLabel = $( ".progress-label" );
+      progressbar.progressbar( "value", 100 * data.offset / data.N );
+      if (data.complete) {
+        progressbar.progressbar( "value", 100);
+        //doCrawl();
+        alert('file loaded!');
+      } else {
+        parseFile(data.offset);
+      }
+    }
+  });
 }
 
 function doCrawl()
