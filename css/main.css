@@ -1,27 +1,46 @@
 body
 {	
 	font-family: Verdana, Helvetica, sans-serif;
-	background-color: #DDDDDD;
+	background-color: #F5E5B7;
+}
+
+.error
+{
+	color: red;
+	font-size: 11px;
 }
 
 #top-sec
 {
-
+	margin: 10px;
 }
 
 #main-title
 {
-	font-size: 18px;
+	font-size: 24px;
+	margin: 20px;
 }
 
 #description
 {
 	font-family: 'Arial',sans-serif;
+	width: 75%;
+	margin-left: auto;
+	margin-right: auto;
+	text-align: center;
+	font-style: italic;
+}
+
+#form-wrapper
+{
+	width: 90%;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 #new-or-old
 {
-
+	margin: 20px;
 }
 
 #new-template

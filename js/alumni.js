@@ -1,58 +1,53 @@
-function initAlumni()
+function initAlumni(fileloaded,crawled)
 {
-  $.post('/extras',{'func':'init'},
-    function(data)
-    {
-      if (data.hasOwnProperty('ecode')) { 
-        switch(data.ecode)
-        {
-          case 300:
-            if(data.n_templates == 0)
-            {
-              $("#new-or-old input:radio").attr('disabled',true);
-              $('#create-button').click(verifyTemplate());
-            }
-            else
-            {
-              $("#new-or-old input:radio").change(function(){
-                // Show new template or loading templates
-                if($('input[name=noo-radio]:checked', '#new-or-old').val() == 'new')
-                {
-                  $('#new-template').show();
-                  $('load-template').hide();
-                } else {
-                  $('load-template').show();
-                  $('#new-template').hide();
-                }
-              });
-              // Add select option for available templates
-              load_template_str = '<select>';
-              for (var i = data.templates.length - 1; i >= 0; i--) {
-                load_template_str += "<option value='" + data.templates[i].short + "'>";
-                load_template_str += data.templates[i].name + "</option>";
-              };
-              load_template_str += '</select>';
-              // Add button to begin
-              load_template_str += '<input type="button" name="crawl" value="Begin" onclick="beginCrawl()" />';
-              $('#load-template').html(load_template_str);
-            }
-            break;
-          default:
-            console.log('Error in progress bar: ' + data.ecode);
-        }
-      } else {
-        console.log('Error in init: ' + data);
-      }
-    }, "json");
+  console.log('initAlumni called: ' + fileloaded + "," + crawled);
+  if( crawled==true)
+  {
+    console.log('Begin crawl');
+    doCrawl();
+  }
 }
 
-function verifyTemplate()
+function doCrawl()
 {
-  console.log('Would verify template here');
+  $.post('/crawl',{'limit':10},function(data) {
+    console.log(data);
+    alert('crawled!');
+  });
 }
+
+function validateTemplate()
+{
+  var is_valid = true;
+
+  // verify template name is valid & create short name
+  var template_name_raw = $('#new-template-form input[name=template-name]').val();
+  var template_name = template_name_raw.replace('/[^0-9A-z_ -]/i','');
+  if( template_name.length == 0)
+  {
+    alert('Please use only alphanumeric characters, underscore, hyphen and spaces for the template name');
+    is_valid = false;
+  }
+  var template_short = template_name.replace(' ','');
+  console.log("template: " + template_name);
+
+  // verify school name is valid
+  var school_name_raw = $('#new-template-form input[name=school-name]').val();
+  var school_name = school_name_raw.replace('/[^A-z]/i','');
+  if( school_name.length == 0)
+  {
+    alert('Please use only alphanumeric characters for the school name');
+    is_valid = false;
+  }
+  console.log("school: " + school_name);
+
+  if(is_valid) $('#new-template-form').submit();
+}
+
 
 function makeProgress()
 {
+  console.log('making progress');
   var progressbar = $( "#progressbar" ), progressLabel = $( ".progress-label" );
 
   progressbar.progressbar({
