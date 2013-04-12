@@ -2,6 +2,7 @@
 <head>
 	<title>Alumni Outcomes</title>
 	<link type="text/css" rel="stylesheet" href="/css/main.css" />
+	<link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.7.2/themes/humanity/jquery-ui.css" type="text/css" />
 	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
 	<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/jquery-ui.min.js"></script>
 	<script src="/js/alumni.js"></script>
@@ -35,7 +36,7 @@
 				<form id='load-template-form' action='/initoauth' method="post">
 					<select id='template-to-load' name='template-to-load'>
 						{% for template in templates %}
-						<option value={{ template.short }} {% if template.short==loaded-template %} selected="selected" {% endif %}> {{ template.name }}: {{ template.N }} alumni</option>
+						<option value={{ template.short }} {% if template.short==loaded_template %} selected="selected" {% endif %}> {{ template.name }}: {{ template.N }} alumni</option>
 						{% endfor %}
 					</select>
 					<input type="submit" name="crawl" value="Begin" {{ begindisabled }}/>
@@ -44,8 +45,10 @@
 		</div>
 	</div>
 	<div id='bottom-sec'>
-		<div id='loaded-template-name'></div>
-		<div id="progressbar"><div class="progress-label">Loading...</div></div>
+		<div id='loaded-template'>{{loaded_template}}</div>
+		<div id='progress-wrapper'>
+			<div id="progressbar"><div class="progress-label">Loading...</div></div>
+		</div>
 		<div id='percent-match' class'd3vis'>
 		</div>
 		<div id='regions' class='d3vis'>

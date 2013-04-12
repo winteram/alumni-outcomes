@@ -1,18 +1,9 @@
 function initAlumni(fileloaded,crawled)
 {
   console.log('initAlumni called: ' + fileloaded + "," + crawled);
-  if( fileloaded==true)
+  if( fileloaded==true )
   {
-    var progressbar = $( "#progressbar" ), progressLabel = $( ".progress-label" );
-    progressbar.progressbar({
-      value: false,
-      change: function() {
-        progressLabel.text( progressbar.progressbar( "value" ) + "%" );
-      },
-      complete: function() {
-        progressLabel.text( "Complete!" );
-      }
-    });
+    console.log("Progressbar shown");
     parseFile();
   }
   if( crawled==true)
@@ -22,21 +13,40 @@ function initAlumni(fileloaded,crawled)
   }
 }
 
-function parseFile(offset=0)
+function parseFile(offset)
 {
-  $.post('/extras',{'func':'parsefile','limit':100,'offset':offset},function(data) {
+  //template_name = $("#loaded-template-name").text();
+  //'template-name':template_name
+  $('#progress-wrapper').show();
+  console.log("parseFile called");
+  offset = typeof offset !== 'undefined' ? offset : 0;
+  $.post('/extras',{'func':'parsefile','limit':'100','offset':offset},function(data) {
     if (data.hasOwnProperty('complete')) { 
+      console.log('posted successfully');
       var progressbar = $( "#progressbar" ), progressLabel = $( ".progress-label" );
-      progressbar.progressbar( "value", 100 * data.offset / data.N );
-      if (data.complete) {
+      progressbar.progressbar({
+        value: false,
+        change: function() {
+          progressLabel.text( progressbar.progressbar( "value" ) + "% loaded" );
+        },
+        complete: function() {
+          progressLabel.text( "Complete!" );
+        }
+      });
+      console.log("Progressbar initiated");
+      progress_val = Math.round(10000 * data.offset / data.N) / 100;
+      progressbar.progressbar( "value", progress_val );
+      console.log("parsefile returned, complete is " + data.complete);
+      console.log("Offset is " + data.offset);
+      if (data.complete=='false') {
+        parseFile(data.offset);
+      } else {
         progressbar.progressbar( "value", 100);
         //doCrawl();
         alert('file loaded!');
-      } else {
-        parseFile(data.offset);
       }
     }
-  });
+  }, "json");
 }
 
 function doCrawl()

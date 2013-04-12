@@ -55,12 +55,23 @@ body
 
 #bottom-sec
 {
+	
+}
+
+#loaded-template
+{
 	display: none;
 }
 
-#loaded-template-name
+#progress-wrapper
 {
 	display: none;
+	width: 600px;
+}
+
+#progressbar
+{
+	width: 580px;
 }
 
 .progress-label 

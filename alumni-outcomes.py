@@ -136,7 +136,7 @@ class MainPage(webapp2.RequestHandler):
 			'begindisabled': begindisabled,
 			'crawled': is_crawled,
 			'todisable': len(templates) == 0 and 'disabled="disabled"' or '',
-			'loaded-template': loaded_template,
+			'loaded_template': loaded_template,
 			'templates': templates
 		}
 
@@ -163,24 +163,34 @@ class LoadContent(webapp2.RequestHandler):
 			template.name = template_name
 			template.short = re.sub('[^a-z0-9]','',template_name.lower())
 			template.school = re.sub('[^A-Za-z0-9]','',self.request.get('school-name'))
-			template.person_file = self.request.get('template-file')
-			template.N = len(re.split('[\r\n]',template.person_file))
+			alums = re.split('[\r\n]',self.request.get('template-file'))
+			new_alums = [ line.strip() for line in alums ]
+			#logging.info(new_alums)
+			template.person_file = '\t'.join(new_alums)
+			session['person_file'] = template.person_file
+			logging.info(len(template.person_file))
+			template.N = len(alums)
 			template.put()
-			logging.info("New template: " + template.short)
+			logging.info("New template: " + template.name)
 			return self.redirect('/?loadfile=True&loaded=' + template.name)
 
 		if func == 'parsefile':
 			response = {'offset':0,'complete':'false'}
-			# check template name doesn't already exist.
-			template_name = self.request.get('template-name')
+			# get template
+			template_name = session['template']
 			template_q = db.GqlQuery("SELECT * FROM Template WHERE name=:1",template_name)
 			template = template_q.get()
 			if template:
+				if 'person_file' in session:
+					template.person_file = session['person_file']
 				# input lines of file into template
-				alums = re.split('[\r\n]',template.person_file)
+				alums = template.person_file.split('\t')
+				logging.info("number of lines: " + str(len(alums)))
+				#logging.info(alums)
 				response['N'] = len(alums)
-				offset = self.request.get('offset')
-				response['offset'] = offset + self.request.get('limit')
+				offset = int(self.request.get('offset'))
+				limit = int(self.request.get('limit'))
+				response['offset'] = offset + limit
 				if response['offset'] > len(alums):
 					response['offset'] = len(alums)
 					response['complete'] = 'true'
@@ -200,6 +210,8 @@ class LoadContent(webapp2.RequestHandler):
 					#logging.info("New alum: " + alum.last_name)
 					alum.put()
 				self.response.out.write(json.dumps(response))
+			else:
+				logging.error("Template not found")
 
 			
 
