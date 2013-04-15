@@ -1,11 +1,14 @@
-import logging
+
+import os
+import re
 import cgi
 import webapp2
-import json
 import jinja2
-import os
-import oauth
-import re
+import json
+import oauth2 as oauth
+#import oauth
+import urllib
+import logging
 import short2long
 
 from google.appengine.ext import db
@@ -18,16 +21,26 @@ from gaesessions import get_current_session
 jinja_environment = jinja2.Environment(
 	loader=jinja2.FileSystemLoader(os.path.dirname(__file__)))
 
-API_KEY = "wFNJekVpDCJtRPFX812pQsJee-gt0zO4X5XmG6wcfSOSlLocxodAXNMbl0_hw3Vl"
-API_SECRET = "daJDa6_8UcnGMw1yuq9TjoO_PMKukXMo8vEMo7Qv5J-G3SPgrAV0FqFCd0TNjQyG"
-#API_KEY = "e3m3hhk13i99"
-#API_SECRET = "i1vChLn1sxp5hjcP"
+#API_KEY = "wFNJekVpDCJtRPFX812pQsJee-gt0zO4X5XmG6wcfSOSlLocxodAXNMbl0_hw3Vl"
+#API_SECRET = "daJDa6_8UcnGMw1yuq9TjoO_PMKukXMo8vEMo7Qv5J-G3SPgrAV0FqFCd0TNjQyG"
+API_KEY = "e3m3hhk13i99"
+API_SECRET = "i1vChLn1sxp5hjcP"
 OAUTH_USER = "9597d89b-c2e1-46fe-b9fd-00fde4896c6a"
 OAUTH_SECRET = "ef7c0dd9-55b3-4fd7-853c-89f6e65ca3b3"
 RETURN_URL = "/oauth"
 
-client = oauth.LinkedInClient(API_KEY, API_SECRET, RETURN_URL)
+# Use API key and secret to instantiate consumer object
+consumer = oauth.Consumer(API_KEY, API_SECRET)
+ 
+# Use developer token and secret to instantiate access token object
+access_token = oauth.Token(key=OAUTH_USER,secret=OAUTH_SECRET)
+ 
+# Create client to make authentication request
+client = oauth.Client(consumer, access_token)
+#client = oauth.LinkedInClient(API_KEY, API_SECRET, RETURN_URL)
 
+
+## DEFINE DATASTORE TABLES & FIELDS
 # holding onto user credentials
 class User(db.Model):
 	userid = db.StringProperty()
@@ -40,7 +53,6 @@ class Template(db.Model):
 	name = db.StringProperty()
 	short = db.StringProperty()
 	school = db.StringProperty()
-	person_file = db.Text()
 	N = db.IntegerProperty()
 	N_loaded = db.IntegerProperty()
 	N_crawled = db.IntegerProperty()
@@ -63,28 +75,42 @@ class Position(db.Model):
 	title = db.StringProperty()
 	company_name = db.StringProperty()
 
-# Constructor for template
+
+# Helper function for interacting with datastore: Constructor for template key
 def template_key():
   """Constructs a Datastore key for a Template entity with default_template."""
   return db.Key.from_path('Template', 'default_template')
 
 
+### Functions for handling web requests
+# This function handles all requests to '/'; this is user's starting point.
 class MainPage(webapp2.RequestHandler):
 	def get(self):
 		session = get_current_session()
 
+		# Default values for jinja template in "index.html"
 		fileloaded = 'false'
 		is_crawled = 'false'
 		newchecked = 'checked="checked"'
 		oldchecked = ''
 		newhidden = ''
 		oldhidden = 'style="display:none"'
+		newdisable = ''
+		olddisable = ''
 		begindisabled = ''
+		loadedtemplate = ''
 
-		# if error 
+		if session.has_key('template'):
+			loadedtemplate = session['template']
+
+		# if there was an error in loading the template
 		ecode = self.request.get('ecode')
 		if ecode == '400':
-			errormsg = 'Input job name exists, please select another'
+			errormsg = '<p>Input job name exists, please select another.</p>'
+		elif ecode == '401':
+			errormsg = '<p>Problem loading input file. Each line should be "last name, first name".</p>'
+		elif ecode == '402':
+			errormsg = '<p>Problem parsing input file. (session variable)</p>'
 		else:
 			errormsg = ''
 
@@ -94,15 +120,32 @@ class MainPage(webapp2.RequestHandler):
 			newchecked = ''
 			oldchecked = 'checked="checked"'
 			newhidden = 'style="display:none"'
-			oldhidden = ''
-			fileloaded = 'true'
-			begindisabled = 'disabled="disabled"'
+			oldhidden = ''			
+			newdisable = 'disabled="disabled"'		# only show currently loading template
+			fileloaded = 'true'						# input to alumni.js:initAlumni, fileloaded=true
+			begindisabled = 'disabled="disabled"'	# disable "begin" button (which would start crawling) as file has to be parsed first
+
+		# if file has been parsed
+		parsefile = self.request.get('parsefile')
+		if parsefile:
+			newchecked = ''
+			oldchecked = 'checked="checked"'
+			newhidden = 'style="display:none"'
+			oldhidden = ''							# show templates available to crawl
 
 		# if returning from OAuth
 		crawled = self.request.get('crawled')
 		if crawled:
-			# doing this through AJAX for progress bar
-			is_crawled = 'true'
+			if crawled=='True':
+				newchecked = ''
+				oldchecked = 'checked="checked"'
+				newhidden = 'style="display:none"'
+				oldhidden = ''			
+				newdisable = 'disabled="disabled"'		# only show currently loading template
+				is_crawled = 'true'						# input to alumni.js:initAlumni, crawled=true (doing this through AJAX for progress bar)
+				begindisabled = 'disabled="disabled"'	# disable "begin" button (which would restart crawling) as file is being crawled
+			else:
+				errormsg = '<p>Problem with authentication</p>'
 
 		# if receiving ~~mystery delete query~~
 		clearall = self.request.get('obliterate')
@@ -121,12 +164,16 @@ class MainPage(webapp2.RequestHandler):
 
 			return self.redirect('/')
 
+		# get list of templates to put in options for crawling / displaying
 		templates = []
 		template_q = db.GqlQuery("SELECT * FROM Template WHERE ANCESTOR IS :1",template_key())
 		for template in template_q:
 			temp = {'name':template.name,'short':template.short,'N':template.N}
 			templates.append(temp)
 
+		# Disable "load templates" if no templates to load
+		if len(templates) == 0: olddisable = 'disabled="disabled"'
+		# dictionary of values to populate jinja template (index.html)
 		template_values = {
 			'errormsg': errormsg,
 			'newchecked': newchecked,
@@ -136,8 +183,10 @@ class MainPage(webapp2.RequestHandler):
 			'fileloaded': fileloaded,
 			'begindisabled': begindisabled,
 			'crawled': is_crawled,
-			'todisable': len(templates) == 0 and 'disabled="disabled"' or '',
-			'templates': templates
+			'newdisable': newdisable,
+			'olddisable': olddisable,
+			'templates': templates,
+			'loadedtemplate': loadedtemplate
 		}
 
 		template = jinja_environment.get_template('index.html')
@@ -148,6 +197,7 @@ class LoadContent(webapp2.RequestHandler):
 		session = get_current_session()
 
 		func = self.request.get('func')
+		# Parse the input for a new template, check for errors, pull the content of the file to be parsed, and return to MainPage with "loadfile"=True
 		if func == 'loadfile':
 			# check template name doesn't already exist.
 			template_name = self.request.get('template-name')
@@ -159,42 +209,57 @@ class LoadContent(webapp2.RequestHandler):
 			# if it doesn't exist, put in session variable
 			session['template'] = template_name
 
+			# create a new template in the datastore
 			template = Template(parent=template_key())
 			template.name = template_name
-			# TODO: check if short name is necessary; maybe pass urlencoded full name?
-			template.short = re.sub('[^a-z0-9]','',template_name.lower())
-			template.school = re.sub('[^A-Za-z0-9]','',self.request.get('school-name'))
-			alums = re.split('[\r\n]',self.request.get('template-file'))
-			new_alums = [ line.strip() for line in alums ]
+			# URLencode template name, so (for example) spaces become %20
+			template.short = urllib.quote_plus(template.name)
+			template.school = self.request.get('school-name')
+
+			# Split input file by lines
+			person_file = re.split('[\r\n]',self.request.get('template-file'))
+			alums = [ line.strip() for line in person_file ]
+			logging.info(len(alums))
+			# If there is zero or one lines in the resulting parsed list, there is a problem with the input file
+			if len(alums) < 2:
+				return self.redirect('/?ecode=401')
 			#logging.info(new_alums)
-			# TODO: check if person_file attribute of template is necessary
-			template.person_file = '\t'.join(new_alums)
-			session['person_file'] = template.person_file
-			logging.info(len(template.person_file))
+			# put list into session variable to be parsed in "parsefile function"
+			session['person_file'] = alums
+			# put info about input file into template in datastore
 			template.N = len(alums)
 			template.N_loaded = 0
 			template.N_crawled = 0
+			# save changes to template in datastore
 			template.put()
 			logging.info("New template: " + template.name)
+			# return to MainPage with loadfile=True
 			return self.redirect('/?loadfile=True')
 
 		if func == 'parsefile':
+			# Default values (would restart if it all went wrong)
 			response = {'offset':0,'complete':'false'}
 			# get template
 			template_name = session['template']
 			template_q = db.GqlQuery("SELECT * FROM Template WHERE name=:1",template_name)
 			template = template_q.get()
 			if template:
-				if 'person_file' in session:
-					template.person_file = session['person_file']
-				# input lines of file into template
-				alums = template.person_file.split('\t')
+				# make sure session variable has input file, otherwise send back to main with error
+				if not session.has_key('person_file'):
+					return self.redirect('/?ecode=402')
+				# get list of alums from session variable
+				alums = session['person_file']
 				#logging.info("number of lines: " + str(len(alums)))
 				#logging.info(alums)
 				response['N'] = len(alums)
+
+				# See if any loaded so far, and start from there.  Otherwise,
+				# get starting point and chunk size from alumni.js:parseFile
 				offset = int(self.request.get('offset'))
 				limit = int(self.request.get('limit'))
 				response['offset'] = offset + limit
+
+				# If end of chunk is past # of people to parse, set complete to true
 				if response['offset'] > len(alums):
 					response['offset'] = len(alums)
 					response['complete'] = 'true'
@@ -208,30 +273,34 @@ class LoadContent(webapp2.RequestHandler):
 
 					lname_group = re.search('[A-Za-z]+',alum_input[0])
 					fname_group = re.search('[A-Z][a-z]+',alum_input[1])
+					# Create a new Person entry in the datastore with loaded template as parent
 					alum = Person(parent=template)
 					alum.first_name = fname_group.group(0)
 					alum.last_name = lname_group.group(0)
 					alum.is_crawled = False
-					#logging.info("New alum: " + alum.last_name)
+					logging.debug("New alum: " + alum.last_name)
+					# Save changes to person in datastore
 					alum.put()
+					# increment the number of alumni loaded into datastore
 					template.N_loaded += 1
+				# save changes to template (number loaded)
 				template.put()
 				self.response.out.write(json.dumps(response))
-				# TODO: decide what happens when file is finished parsing
-				# Once complete, should remove person_file from session variable
-				if response['complete'] == 'true':
-					return self.redirect('/')
 			else:
 				logging.error("Template not found")
 
 			
-
+# Send user to LinkedIn to authenticate
 class InitOAuth(webapp2.RequestHandler):
 	def post(self):
 		session = get_current_session()
+		# set session variable to template to be crawled
 		session['template'] = self.request.get('template-to-load')
+		# tell LinkedIn to direct back to /oauth, handled by HandleOauth
 		client.callback_url = "%s/oauth" % self.request.host_url
-		self.redirect(client.get_authorization_url())
+		
+		self.redirect("https://www.linkedin.com/uas/oauth/authenticate?oauth_token=%s"
+            "&oauth_callback=%s" % (client._get_auth_token(), urlquote(client.callback_url)))
 
 class HandleOAuth(webapp2.RequestHandler):
 	def get(self):
@@ -244,7 +313,7 @@ class HandleOAuth(webapp2.RequestHandler):
 
 			session['uid'] = user_info['id']
 
-			# put user in db
+			# put user in db (with their authentication information to make requests)
 			user_key = db.Key.from_path('User', session['uid'])
 			user = User(parent=user_key)
 			user.userid = user_info['id']
@@ -254,6 +323,7 @@ class HandleOAuth(webapp2.RequestHandler):
 			user.put()
 
 			#self.response.out.write(user_info)
+			# Send user to MainPage with crawled=True, to start crawling in chunks with alumni.js:doCrawl
 			self.redirect('/?crawled=True')
 		else:
 			self.redirect('/?crawled=error')
@@ -446,7 +516,7 @@ class DoViz(webapp2.RequestHandler):
 			return self.response.out.write(json.dumps(ilist))
 
 app = webapp2.WSGIApplication([('/', MainPage), 
-	('/extras', LoadContent), 
+	('/loadcontent', LoadContent), 
 	('/initoauth', InitOAuth), 
 	('/oauth', HandleOAuth),  
 	('/crawl', DoCrawl),

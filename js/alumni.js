@@ -1,8 +1,10 @@
 function initAlumni(fileloaded,crawled)
 {
   console.log('initAlumni called: ' + fileloaded + "," + crawled);
+  // If bew template has been just been created and input file is ready to be parsed
   if( fileloaded==true )
   {
+    // Show & enable progress bar
     $('#progress-wrapper').show();
     var progressbar = $( "#progressbar" ), progressLabel = $( ".progress-label" );
     progressbar.progressbar({
@@ -16,6 +18,7 @@ function initAlumni(fileloaded,crawled)
     });
     progressbar.progressbar( "value", 0 );
     console.log("Progressbar shown");
+    // Begin parsing file
     parseFile();
   }
   if( crawled==true)
@@ -37,43 +40,48 @@ function initAlumni(fileloaded,crawled)
   }
 }
 
-
+// Verify basic field requirements (e.g., no script allowed)
 function validateTemplate()
 {
   var is_valid = true;
 
-  // verify template name is valid & create short name
+  // verify template name is valid 
   var template_name_raw = $('#new-template-form input[name=template-name]').val();
   var template_name = template_name_raw.replace('/[^0-9A-z_ -]/i','');
   if( template_name.length == 0)
   {
-    alert('Please use only alphanumeric characters, underscore, hyphen and spaces for the template name');
+    $('.error').append('<p>Please use only alphanumeric characters, underscore, hyphen and spaces for the template name.</p>');
     is_valid = false;
   }
-  var template_short = template_name.replace(' ','');
-  console.log("template: " + template_name);
 
   // verify school name is valid
   var school_name_raw = $('#new-template-form input[name=school-name]').val();
   var school_name = school_name_raw.replace('/[^A-z]/i','');
   if( school_name.length == 0)
   {
-    alert('Please use only alphanumeric characters for the school name');
+    $('.error').append('<p>Please use only alphanumeric characters for the school name.</p>');
     is_valid = false;
   }
   console.log("school: " + school_name);
 
+  // If input fields check out, post to alumni-outcomes.py:LoadContent
   if(is_valid) $('#new-template-form').submit();
 }
 
+// This parses the input file in chunks, so progress can be shown in progress bar
 function parseFile(offset)
 {
   $('#progress-wrapper').show();
-  console.log("parseFile called");
+  // console.log("parseFile called");
+
+  // If no offset, start from the begining (0)
   offset = typeof offset !== 'undefined' ? offset : 0;
-  $.post('/extras',{'func':'parsefile','limit':'100','offset':offset},function(data) {
+  // post to alumni-outcomes.py:LoadContent to parse file in chunk of 100 (limit) starting from last point (offset)
+  $.post('/loadcontent',{'func':'parsefile','limit':'100','offset':offset},function(data) {
+    // if successful transaction, response will have "complete" set
     if (data.hasOwnProperty('complete')) { 
       console.log('posted successfully');
+      // Initiate progress bar
       var progressbar = $( "#progressbar" ), progressLabel = $( ".progress-label" );
       progressbar.progressbar({
         value: false,
@@ -85,16 +93,18 @@ function parseFile(offset)
         }
       });
       console.log("Progressbar initiated");
+      // Update progress bar with amount parsed so far
       progress_val = Math.round(10000 * data.offset / data.N) / 100;
       progressbar.progressbar( "value", progress_val );
       console.log("parsefile returned, complete is " + data.complete);
       console.log("Offset is " + data.offset);
+      // If not complete, call this function with new starting point
       if (data.complete=='false') {
         parseFile(data.offset);
       } else {
         progressbar.progressbar( "value", 100);
-        //doCrawl();
-        alert('file loaded!');
+        // direct user to main page with parsefile=True
+        window.location = '/?parsefile=True';
       }
     }
   }, "json");

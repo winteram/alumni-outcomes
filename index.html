@@ -7,6 +7,7 @@
 	<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/jquery-ui.min.js"></script>
 	<script src="/js/d3.v2.min.js"></script>
 	<script src="/js/alumni.js"></script>
+	<!-- The values filled in below pass flags to javascript that determine whether use has loaded a file or crawled a file -->
 	<script language="javascript" type="text/javascript"> 
 		window.onload=initAlumni({{ fileloaded }},{{ crawled }}); 
 	</script>
@@ -20,31 +21,41 @@
 		</div>
 		<div id='form-wrapper'>
 			<div id="new-or-old">
-				<span><input type="radio" {{ newchecked }} name="noo-radio" value="new" onchange="$('.new-or-load').toggle()"/> Start New Template </span>
-				<span><input type="radio" {{ oldchecked }} {{ todisable }} name="noo-radio" value="old" onchange="$('.new-or-load').toggle()"/> Load Template </span>
+				<!-- The default value on this radio button is usually new template, but will be old if returning from creating template -->
+				<span><input type="radio" {{ newchecked }} {{ newdisable }} name="noo-radio" value="new" onchange="$('.new-or-load').toggle()"/> Start New Template </span>
+				<!-- If there are no templates in the datastore, "todisable" will disable this option -->
+				<span><input type="radio" {{ oldchecked }} {{ olddisable }} name="noo-radio" value="old" onchange="$('.new-or-load').toggle()"/> Load Template </span>
 			</div>
+			<!-- The form for creating a template or crawling a template is toggled with the "newhidden" and "oldhidden" variables -->
 			<div id='new-template' class='new-or-load' {{ newhidden }} >
-				<form id='new-template-form' action="/extras" enctype="multipart/form-data" method="post">
+				<form id='new-template-form' action="/loadcontent" enctype="multipart/form-data" method="post">
+					<!-- This hidden input variable tells alumni-outcomes.py:LoadContent to run the "loadfile" code -->
 					<input type='hidden' name='func' value='loadfile' />
+					<!-- This is populated if there was an error in the template values -->
 					<div class='error'>{{ errormsg }}</div>
 					<span>Input Job Name:</span><span><input type='text' name='template-name' /></span>
 					<span>Input School Name:</span><span><input type='text' name='school-name' /></span>
 					<span><input type='file' name='template-file' value='Choose File'></span>
+					<!-- First check that everything entered is valid in alumni.js:validateTemplate, then post the form to alumni-outcomes.py:LoadContent -->
 					<span><input type='button' name='create-button' value='Load File' onClick='validateTemplate()'/></span>
 				</form>
 			</div>
 			<div id='load-template' class='new-or-load' {{ oldhidden }} >
 				<form id='load-template-form' action='/initoauth' method="post">
 					<select id='template-to-load' name='template-to-load'>
+						<!-- This creates the list of existing templates, selecting the one that is being parsed or crawled -->
 						{% for template in templates %}
-						<option value={{ template.short }} {% if template.short==loaded_template %} selected="selected" {% endif %}> {{ template.name }}: {{ template.N }} alumni</option>
+						<option value={{ template.short }} {% if template.short==loadedtemplate %} selected="selected" {% endif %}> {{ template.name }}: {{ template.N }} alumni</option>
 						{% endfor %}
 					</select>
+					<!-- This is disabled while parsing the input file. -->
+					<!-- When enabled, this submits the selected template name to alumni-outcomes.py:InitOauth -->
 					<input type="submit" name="crawl" value="Begin" {{ begindisabled }}/>
 				</form>
 			</div>
 		</div>
 	</div>
+	<!-- This section displays the results once available -->
 	<div id='bottom-sec'>
 		<div id='progress-wrapper'>
 			<div id="progressbar"><div class="progress-label">Loading...</div></div>
