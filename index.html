@@ -5,6 +5,7 @@
 	<link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.7.2/themes/humanity/jquery-ui.css" type="text/css" />
 	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
 	<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/jquery-ui.min.js"></script>
+	<script src="/js/d3.v2.min.js"></script>
 	<script src="/js/alumni.js"></script>
 	<script language="javascript" type="text/javascript"> 
 		window.onload=initAlumni({{ fileloaded }},{{ crawled }}); 
@@ -24,7 +25,7 @@
 			</div>
 			<div id='new-template' class='new-or-load' {{ newhidden }} >
 				<form id='new-template-form' action="/extras" enctype="multipart/form-data" method="post">
-					<input type='hidden' name='func' value='loadfile'>
+					<input type='hidden' name='func' value='loadfile' />
 					<div class='error'>{{ errormsg }}</div>
 					<span>Input Job Name:</span><span><input type='text' name='template-name' /></span>
 					<span>Input School Name:</span><span><input type='text' name='school-name' /></span>
@@ -45,15 +46,16 @@
 		</div>
 	</div>
 	<div id='bottom-sec'>
-		<div id='loaded-template'>{{loaded_template}}</div>
 		<div id='progress-wrapper'>
 			<div id="progressbar"><div class="progress-label">Loading...</div></div>
 		</div>
-		<div id='percent-match' class'd3vis'>
-		</div>
-		<div id='regions' class='d3vis'>
+		<div id='percent-match' class='d3vis'>
 		</div>
 		<div id='countries' class='d3vis'>
+			<div id='countrypie'></div>
+			<div id='countrylist'></div>
+		</div>
+		<div id='regions' class='d3vis'>
 		</div>
 		<div id='industries' class='d3vis'>
 		</div>

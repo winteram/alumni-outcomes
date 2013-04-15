@@ -67,6 +67,8 @@ body
 {
 	display: none;
 	width: 600px;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 #progressbar
@@ -82,3 +84,65 @@ body
     font-weight: bold;
     text-shadow: 1px 1px 0 #fff;
  }
+
+.d3vis
+{
+	display: none;
+	float: left;
+	padding: 10px;
+	border: dashed 2px black;
+}
+
+#percent-match
+{
+	width: 200px;
+}
+
+.pctmatch
+{
+	font-size: 54px;
+}
+
+.pctmatch-pct
+{
+	font-size: 24px;
+}
+
+.pctmatch-txt
+{
+	font-size: 12px;
+	font-style: italic;
+}
+
+#countrypie
+{
+	float: left;
+}
+
+#countrylist
+{
+	float: left;
+	padding-top: 30px;
+}
+
+
+.bar {
+  fill: steelblue;
+}
+
+.rname {
+	font-family: 'Arial',sans-serif;
+	font-size: 12px;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+
+.x.axis path {
+  display: none;
+}

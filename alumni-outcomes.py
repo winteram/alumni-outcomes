@@ -6,6 +6,7 @@ import jinja2
 import os
 import oauth
 import re
+import short2long
 
 from google.appengine.ext import db
 from google.appengine.ext import webapp
@@ -41,6 +42,8 @@ class Template(db.Model):
 	school = db.StringProperty()
 	person_file = db.Text()
 	N = db.IntegerProperty()
+	N_loaded = db.IntegerProperty()
+	N_crawled = db.IntegerProperty()
 	created = db.DateTimeProperty(auto_now_add=True)
 
 # people crawled / to be crawled
@@ -77,7 +80,6 @@ class MainPage(webapp2.RequestHandler):
 		newhidden = ''
 		oldhidden = 'style="display:none"'
 		begindisabled = ''
-		loaded_template = ''
 
 		# if error 
 		ecode = self.request.get('ecode')
@@ -95,7 +97,6 @@ class MainPage(webapp2.RequestHandler):
 			oldhidden = ''
 			fileloaded = 'true'
 			begindisabled = 'disabled="disabled"'
-			loaded_template = self.request.get('loaded')
 
 		# if returning from OAuth
 		crawled = self.request.get('crawled')
@@ -136,7 +137,6 @@ class MainPage(webapp2.RequestHandler):
 			'begindisabled': begindisabled,
 			'crawled': is_crawled,
 			'todisable': len(templates) == 0 and 'disabled="disabled"' or '',
-			'loaded_template': loaded_template,
 			'templates': templates
 		}
 
@@ -161,18 +161,22 @@ class LoadContent(webapp2.RequestHandler):
 
 			template = Template(parent=template_key())
 			template.name = template_name
+			# TODO: check if short name is necessary; maybe pass urlencoded full name?
 			template.short = re.sub('[^a-z0-9]','',template_name.lower())
 			template.school = re.sub('[^A-Za-z0-9]','',self.request.get('school-name'))
 			alums = re.split('[\r\n]',self.request.get('template-file'))
 			new_alums = [ line.strip() for line in alums ]
 			#logging.info(new_alums)
+			# TODO: check if person_file attribute of template is necessary
 			template.person_file = '\t'.join(new_alums)
 			session['person_file'] = template.person_file
 			logging.info(len(template.person_file))
 			template.N = len(alums)
+			template.N_loaded = 0
+			template.N_crawled = 0
 			template.put()
 			logging.info("New template: " + template.name)
-			return self.redirect('/?loadfile=True&loaded=' + template.name)
+			return self.redirect('/?loadfile=True')
 
 		if func == 'parsefile':
 			response = {'offset':0,'complete':'false'}
@@ -185,7 +189,7 @@ class LoadContent(webapp2.RequestHandler):
 					template.person_file = session['person_file']
 				# input lines of file into template
 				alums = template.person_file.split('\t')
-				logging.info("number of lines: " + str(len(alums)))
+				#logging.info("number of lines: " + str(len(alums)))
 				#logging.info(alums)
 				response['N'] = len(alums)
 				offset = int(self.request.get('offset'))
@@ -207,9 +211,16 @@ class LoadContent(webapp2.RequestHandler):
 					alum = Person(parent=template)
 					alum.first_name = fname_group.group(0)
 					alum.last_name = lname_group.group(0)
+					alum.is_crawled = False
 					#logging.info("New alum: " + alum.last_name)
 					alum.put()
+					template.N_loaded += 1
+				template.put()
 				self.response.out.write(json.dumps(response))
+				# TODO: decide what happens when file is finished parsing
+				# Once complete, should remove person_file from session variable
+				if response['complete'] == 'true':
+					return self.redirect('/')
 			else:
 				logging.error("Template not found")
 
@@ -250,56 +261,196 @@ class HandleOAuth(webapp2.RequestHandler):
 # do crawl
 class DoCrawl(webapp2.RequestHandler):
 	def post(self):
+		# create default response object
+		robj = {'ncrawled':0,'N':0}
+
 		session = get_current_session()
 		if not session.has_key('uid'):
-			return self.response.out.write('ERR 401 Session ID missing')
-
-		# for testing
-		# params = {'first-name':'winter','last-name':'mason','school-name':'indiana'}
+			robj['error'] = 'ERR 401 Session User ID missing'
+			return self.response.out.write(json.dumps(robj))
 
 		# get school name
 		if session['template']:
 			template_q = db.GqlQuery("SELECT * FROM Template WHERE short=:1",session['template'])
-			t_exists = template_q.get()
-			if t_exists:
-				school = t_exists.school
-				t_name = t_exists.name
+			template = template_q.get()
+			if template:
+				school = template.school
+				robj['N'] = template.N
+				robj['ncrawled'] = template.ncrawled
 			else:
-				return self.response.out.write("ERR 400 Template db error, DoCrawl: " + session['template'])
+				robj['error'] = "ERR 400 Template db error, DoCrawl: " + session['template']
+				return self.response.out.write(json.dumps(robj))
 		else:
-			return self.response.out.write("ERR 400 Template session error, DoCrawl")
+			robj['error'] = "ERR 400 Template session error, DoCrawl"
+			return self.response.out.write(json.dumps(robj))
 
-		logging.info("Template loaded:" + t_exists.short)
+		logging.info("Template loaded:" + template.short)
+
+		# TODO: get ncrawled
+		# robj['ncrawled'] = int(self.request.get('ncrawled')) or 0
+
 		user_q = db.GqlQuery("SELECT * FROM User WHERE userid=:1",session['uid'])
 		user = user_q.get()
 		if user:
 			# iterate through people in Template
 			person_q = Person.all()
-			#person_q.filter("is_crawled =",0)
-			person_q.ancestor(t_exists)
+			person_q.filter("is_crawled !=",True)
+			person_q.ancestor(template)
 			npeople = int(self.request.get('limit')) or 10
 			for person in person_q.run(limit=npeople):
-				params = {'first-name':person.first_name,'last-name':person.last_name,'school-name':school}
+			#for person in person_q.run(limit=1):
+				params = {'first-name':person.first_name,'last-name':person.last_name,'school-name':school,'format':'json'}
 				logging.info("Alum loaded: " + person.last_name)
-				self.response.out.write(person.last_name)
-				# request_url = "http://api.linkedin.com/v1/people-search"
-				# result = client.make_request(url=request_url, 
-				# 	token=user.utoken, 
-				# 	secret=user.usecret,
-				# 	additional_params=params)
-				# # handle throttle limit 
-				# return self.response.out.write(result.content)
-		else:
-			return self.response.out.write("ERR 402 No user!")
-		
-		
+				request_url = "http://api.linkedin.com/v1/people-search"
+				request_url += ":(people:(id,first-name,last-name,industry,location,positions:(title,company)),num-results)"
+				result = client.make_request(url=request_url, 
+					token=user.utoken, 
+					secret=user.usecret,
+					additional_params=params)
+				try:
+					li_person = json.loads(result.content)
+				except:
+					logging.info("Error loading " + person.first_name + " " + person.last_name)
+					logging.info(result.content)
+				else:
+					# handle throttle limit 
+					if 'people' not in li_person:
+						if 'message' in li_person and li_person['message'][0:8]=="Throttle":
+							robj['throttled'] = 'true'
+							return self.response.out.write(json.dumps(robj))
+					person.n_results = li_person['people']['_total']
+					if person.n_results == 1:
+						alum = li_person['people']['values'][0]
+						person.crawled_first_name = 'firstName' in alum and alum['firstName'] or fname
+						person.crawled_last_name = 'lastName' in alum and alum['lastName'] or lname
+						logging.info(person.crawled_first_name + " " + person.crawled_last_name)
+						if 'location' in alum:
+							person.location = 'name' in alum['location'] and alum['location']['name'] or 'NA'
+							if 'country' in alum['location']:
+								person.country = 'code' in alum['location']['country'] and alum['location']['country']['code'] or 'NA'
+						else:
+							person.location = 'NA'
+							person.country = 'NA'
+						person.industry = 'industry' in alum and alum['industry'] or 'NA'
+						if 'positions' in alum:
+							for i in range(0,alum['positions']['_total']):
+								position = Position(parent=person)
+								position.title = 'title' in alum['positions']['values'][i] and alum['positions']['values'][i]['title'] or 'NA'
+								position.company_name = 'name' in alum['positions']['values'][i]['company'] and alum['positions']['values'][i]['company']['name'] or 'NA'
+					person.is_crawled = True
+					person.put()    
+					robj['ncrawled'] += 1
+					template.N_crawled += 1
+					template.put()
 
+		else:
+			robj['error'] = "ERR 402 No user!"
+			return self.response.out.write(json.dumps(robj))
+
+		# no errors, return response object (robj)
+		return self.response.out.write(json.dumps(robj))
+		
+# get data for visualizations
+class DoViz(webapp2.RequestHandler):
+	def post(self):
+		robj = {}
+		session = get_current_session()
+
+		# get template
+		if session['template']:
+			template_q = db.GqlQuery("SELECT * FROM Template WHERE short=:1",session['template'])
+			template = template_q.get()
+			if not template:
+				robj['error'] = "ERR 400 Template db error, DoCrawl: " + session['template']
+				return self.response.out.write(json.dumps(robj))
+		else:
+			robj['error'] = "ERR 400 Template session error, DoCrawl"
+			return self.response.out.write(json.dumps(robj))
+
+		logging.info("Template loaded for viz:" + template.short)
+
+		viz = self.request.get('viz')
+		if viz == 'pctmatch':
+			ncrawled = 0
+			nmatch = 0
+			# iterate through crawled people in Template
+			person_q = Person.all()
+			person_q.filter("is_crawled =",True)
+			person_q.ancestor(template)
+			for person in person_q.run():
+				ncrawled += 1
+				if person.n_results == 1:
+					nmatch += 1
+			if ncrawled > 0:
+				robj['pctmatch'] = round(100*nmatch/ncrawled,2)
+			else:
+				robj['pctmatch'] = 0
+				logging.error('ncrawled = 0')
+			return self.response.out.write(json.dumps(robj))
+
+		if viz == 'piecountry':
+			countries = {}
+			total = 0
+			# iterate through crawled people in Template
+			person_q = Person.all()
+			person_q.filter("is_crawled =",True)
+			person_q.ancestor(template)
+			for person in person_q.run():
+				if person.n_results == 1 and person.country != "NA" :
+					total += 1
+					if person.country in countries:
+						countries[person.country] += 1
+					else:
+						countries[person.country] = 1
+			clist = [{'country':short2long.getCountryName(c),'freq':v} for c,v in countries.iteritems()]
+			clist.sort(key=lambda tup: tup['freq'],reverse=True) 
+			robj = {'clist':clist,'pdata': [{'country':'US','freq':countries['us']},{'country':'Other','freq':total-countries['us']}]}
+			return self.response.out.write(json.dumps(robj))
+
+		if viz == 'histregion':
+			regions = {}
+			total = 0
+			# iterate through crawled people in Template
+			person_q = Person.all()
+			person_q.filter("is_crawled =",True)
+			person_q.ancestor(template)
+			for person in person_q.run():
+				if person.n_results == 1 and person.location != "NA" :
+					total += 1
+					if person.location in regions:
+						regions[person.location] += 1
+					else:
+						regions[person.location] = 1
+			rlist = [{'region':r,'freq':round(float(v)/float(total),4)} for r,v in regions.iteritems()]
+			rlist.sort(key=lambda tup: tup['freq'],reverse=True) 
+			#logging.info(rlist)
+			return self.response.out.write(json.dumps(rlist))
+
+		if viz == 'histindustry':
+			industries = {}
+			total = 0
+			# iterate through crawled people in Template
+			person_q = Person.all()
+			person_q.filter("is_crawled =",True)
+			person_q.ancestor(template)
+			for person in person_q.run():
+				if person.n_results == 1 and person.industry != "NA" :
+					total += 1
+					if person.industry in industries:
+						industries[person.industry] += 1
+					else:
+						industries[person.industry] = 1
+			ilist = [{'industry':r,'freq':round(float(v)/float(total),4)} for r,v in industries.iteritems()]
+			ilist.sort(key=lambda tup: tup['freq'],reverse=True) 
+			logging.info(ilist)
+			return self.response.out.write(json.dumps(ilist))
 
 app = webapp2.WSGIApplication([('/', MainPage), 
 	('/extras', LoadContent), 
 	('/initoauth', InitOAuth), 
 	('/oauth', HandleOAuth),  
-	('/crawl', DoCrawl)], 
+	('/crawl', DoCrawl),
+	('/viz', DoViz)], 
 	debug=True)
 
 
