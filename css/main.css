@@ -19,6 +19,15 @@ body
 {
 	font-size: 24px;
 	margin: 20px;
+	margin-left: auto;
+	margin-right: auto;
+	text-align: center;
+}
+
+#main-title a
+{
+	text-decoration: none;
+	color: black;
 }
 
 #description
@@ -55,7 +64,6 @@ body
 
 #bottom-sec
 {
-	
 }
 
 #loaded-template
@@ -69,6 +77,7 @@ body
 	width: 600px;
 	margin-left: auto;
 	margin-right: auto;
+	margin-bottom: 30px;
 }
 
 #progressbar

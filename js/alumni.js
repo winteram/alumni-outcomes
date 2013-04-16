@@ -77,7 +77,7 @@ function parseFile(offset)
   // If no offset, start from the begining (0)
   offset = typeof offset !== 'undefined' ? offset : 0;
   // post to alumni-outcomes.py:LoadContent to parse file in chunk of 100 (limit) starting from last point (offset)
-  $.post('/loadcontent',{'func':'parsefile','limit':'100','offset':offset},function(data) {
+  $.post('/loadcontent',{'func':'parsefile','limit':'10','offset':offset},function(data) {
     // if successful transaction, response will have "complete" set
     if (data.hasOwnProperty('complete')) { 
       console.log('posted successfully');
@@ -243,13 +243,16 @@ function doViz()
     y.domain(data.map(function(d) { return d.region; }));
 
     svg.selectAll(".bar")
-        .data(data)
-        .enter().append("rect")
+      .data(data)
+      .enter().append("rect")
         .attr("class", "bar")
         .attr("x", 200)
-        .attr("width", function(d) { return x(d.freq); })
+        .attr("width", 0)
         .attr("y", function(d) { return y(d.region); })
-        .attr("height", y.rangeBand());
+        .attr("height", y.rangeBand())
+      .transition()
+        .duration(750)
+        .attr("width",function(d) { return x(d.freq); });
 
     svg.selectAll(".rname")
         .data(data)
@@ -272,18 +275,13 @@ function doViz()
 
     svg.append("g")
         .attr("class", "x axis")
-        //.attr("transform", "translate(0," + height + ")")
+        .attr("transform", "translate(200," + height + ")")
         .call(xAxis);
 
-    svg.append("g")
-        .attr("class", "y axis")
-        .call(yAxis);
-/*        .append("text")
-        .attr("transform", "rotate(-90)")
-        .attr("y", 6)
-        .attr("dy", ".71em")
-        .style("text-anchor", "end")
-        .text("Frequency"); */
+    // svg.append("g")
+    //     .attr("class", "y axis")
+    //     .attr("transform", "translate(200,0)")
+    //     .call(yAxis);
 
   },"json");
 
@@ -312,18 +310,21 @@ function doViz()
     y.domain(data.map(function(d) { return d.industry; }));
 
     svg.selectAll(".bar")
-        .data(data)
-        .enter().append("rect")
+      .data(data)
+      .enter().append("rect")
         .attr("class", "bar")
-        .attr("x", 200)
-        .attr("width", function(d) { return x(d.freq); })
+        .attr("x", 230)
+        .attr("width", 0)
         .attr("y", function(d) { return y(d.industry); })
-        .attr("height", y.rangeBand());
+        .attr("height", y.rangeBand())
+      .transition()
+        .duration(750)
+        .attr("width",function(d) { return x(d.freq); });;
 
     svg.selectAll(".rname")
         .data(data)
         .enter().append("text")
-        .attr("x", 190)
+        .attr("x", 220)
         .attr("y", function(d) { return y(d.industry) + y.rangeBand()/2; } )
         .attr("dy", ".35em")
         .attr("text-anchor", "end")
@@ -341,19 +342,52 @@ function doViz()
 
     svg.append("g")
         .attr("class", "x axis")
-        //.attr("transform", "translate(0," + height + ")")
+        .attr("transform", "translate(230," + height + ")")
         .call(xAxis);
 
-    svg.append("g")
-        .attr("class", "y axis")
-        .call(yAxis);
-/*        .append("text")
-        .attr("transform", "rotate(-90)")
-        .attr("y", 6)
-        .attr("dy", ".71em")
-        .style("text-anchor", "end")
-        .text("Frequency"); */
+    // svg.append("g")
+    //     .attr("class", "y axis")
+    //     .call(yAxis);
 
   },"json");
+
+  // Helper function for word cloud
+  function draw(words) 
+  {
+    d3.select("#titles").append("svg")
+        .attr("width", 600)
+        .attr("height", 400)
+      .append("g")
+        .attr("transform", "translate(150,150)")
+      .selectAll("text")
+        .data(words)
+      .enter().append("text")
+        .style("font-size", function(d) { return d.size + "px"; })
+        .style("font-family", "Impact")
+        .style("fill", function(d, i) { return fill(i); })
+        .attr("text-anchor", "middle")
+        .attr("transform", function(d) {
+          return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
+        })
+        .text(function(d) { return d.text; });
+  }
+
+  // Visualize Word Cloud
+  $.post('/viz',{'viz':'titlecloud'}, function(data)
+  {
+    var fill = d3.scale.category20();
+
+    d3.layout.cloud().size([600, 400])
+        .words(data.map(function(d) {
+          return {text: d.word, size: d.freq};
+        }))
+        .rotate(function() { return ~~(Math.random() * 2) * 90; })
+        .font("Impact")
+        .fontSize(function(d) { return d.size; })
+        .on("end", draw)
+        .start();
+
+  },"json");
+  
 }
 

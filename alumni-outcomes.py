@@ -5,9 +5,11 @@ import cgi
 import webapp2
 import jinja2
 import json
-import oauth2 as oauth
+#import oauth2 as oauth
 #import oauth
 import urllib
+import urlparse
+import httplib2
 import logging
 import short2long
 
@@ -21,23 +23,12 @@ from gaesessions import get_current_session
 jinja_environment = jinja2.Environment(
 	loader=jinja2.FileSystemLoader(os.path.dirname(__file__)))
 
-#API_KEY = "wFNJekVpDCJtRPFX812pQsJee-gt0zO4X5XmG6wcfSOSlLocxodAXNMbl0_hw3Vl"
-#API_SECRET = "daJDa6_8UcnGMw1yuq9TjoO_PMKukXMo8vEMo7Qv5J-G3SPgrAV0FqFCd0TNjQyG"
+## Credentials for interacting with LinkedIn
 API_KEY = "e3m3hhk13i99"
 API_SECRET = "i1vChLn1sxp5hjcP"
 OAUTH_USER = "9597d89b-c2e1-46fe-b9fd-00fde4896c6a"
 OAUTH_SECRET = "ef7c0dd9-55b3-4fd7-853c-89f6e65ca3b3"
-RETURN_URL = "/oauth"
-
-# Use API key and secret to instantiate consumer object
-consumer = oauth.Consumer(API_KEY, API_SECRET)
- 
-# Use developer token and secret to instantiate access token object
-access_token = oauth.Token(key=OAUTH_USER,secret=OAUTH_SECRET)
- 
-# Create client to make authentication request
-client = oauth.Client(consumer, access_token)
-#client = oauth.LinkedInClient(API_KEY, API_SECRET, RETURN_URL)
+RANDSTRING = "thisWASaRANDOMstring1234inaway"
 
 
 ## DEFINE DATASTORE TABLES & FIELDS
@@ -81,6 +72,26 @@ def template_key():
   """Constructs a Datastore key for a Template entity with default_template."""
   return db.Key.from_path('Template', 'default_template')
 
+def api_fetch(token,resource="/v1/~",params={},method="GET",):
+	h = httplib2.Http()
+	params.update({'oauth2_access_token':token,'format':'json'})
+	url = 'https://api.linkedin.com' + resource + '?' + urllib.urlencode(params)
+	resp, content = h.request(url, method)
+	if resp['status'] != '200':
+		if resp['status'] == '403':
+			err = "Throttled"
+			return {'error':err}
+		else:
+			err = "Invalid response %s, %s" % (resp['status'],resp['reason'])
+			return {'error':err}
+	logging.info(content)
+	try:
+		response = json.loads(content)
+	except:
+		err = "Bad JSON: %s" % content
+		return {'error':err}
+	else:
+		return response
 
 ### Functions for handling web requests
 # This function handles all requests to '/'; this is user's starting point.
@@ -273,12 +284,14 @@ class LoadContent(webapp2.RequestHandler):
 
 					lname_group = re.search('[A-Za-z]+',alum_input[0])
 					fname_group = re.search('[A-Z][a-z]+',alum_input[1])
+
 					# Create a new Person entry in the datastore with loaded template as parent
 					alum = Person(parent=template)
 					alum.first_name = fname_group.group(0)
 					alum.last_name = lname_group.group(0)
 					alum.is_crawled = False
 					logging.debug("New alum: " + alum.last_name)
+
 					# Save changes to person in datastore
 					alum.put()
 					# increment the number of alumni loaded into datastore
@@ -296,35 +309,66 @@ class InitOAuth(webapp2.RequestHandler):
 		session = get_current_session()
 		# set session variable to template to be crawled
 		session['template'] = self.request.get('template-to-load')
-		# tell LinkedIn to direct back to /oauth, handled by HandleOauth
-		client.callback_url = "%s/oauth" % self.request.host_url
+
+		request_token_url = "https://www.linkedin.com/uas/oauth2/authorization?response_type=code&client_id=" + API_KEY 
+		request_token_url += "&scope=r_basicprofile%20r_network"
+		request_token_url += "&state=" + RANDSTRING
+		request_token_url += '&redirect_uri=' 
+		request_token_url += "%s/oauth" % self.request.host_url
 		
-		self.redirect("https://www.linkedin.com/uas/oauth/authenticate?oauth_token=%s"
-            "&oauth_callback=%s" % (client._get_auth_token(), urlquote(client.callback_url)))
+		self.redirect(request_token_url)
 
 class HandleOAuth(webapp2.RequestHandler):
 	def get(self):
 		session = get_current_session()
 		# verify token
-		if self.request.get('oauth_token'):
-			auth_token = self.request.get("oauth_token")
-			auth_verifier = self.request.get("oauth_verifier")
-			user_info = client.get_user_info(auth_token, auth_verifier=auth_verifier)
+		#if self.request.get('access_token'):
+		if self.request.get('code'):
+			if self.request.get('state') == RANDSTRING:
+				auth_url = "https://www.linkedin.com/uas/oauth2/accessToken?grant_type=authorization_code"
+				auth_url += "&code=" + self.request.get('code')
+				auth_url += "&redirect_uri=" 
+				auth_url += "%s/oauth" % self.request.host_url
+				auth_url += "&client_id=" + API_KEY
+				auth_url += "&client_secret=" + API_SECRET
 
-			session['uid'] = user_info['id']
+				h = httplib2.Http()
+				resp, content = h.request(auth_url, "POST")
+				if resp['status'] != '200':
+					logging.error("Invalid response %s." % resp['status'])
+					self.redirect('/?crawled=error')
+				logging.info(content)
+				try:
+					access_obj = json.loads(content)
+				except:
+					logging.error("Invalid response %s." % content)
+					self.redirect('/?crawled=error')
 
-			# put user in db (with their authentication information to make requests)
-			user_key = db.Key.from_path('User', session['uid'])
-			user = User(parent=user_key)
-			user.userid = user_info['id']
-			user.uname = user_info['name']
-			user.utoken = user_info['token']
-			user.usecret = user_info['secret']
-			user.put()
+				access_token = access_obj["access_token"]
+				user_info = api_fetch(access_token,"/v1/people/~:(id,first-name,last-name)")
+				if user_info.has_key('error'):
+					logging.error(user_info)
+					self.redirect('/?crawled=error')
 
-			#self.response.out.write(user_info)
-			# Send user to MainPage with crawled=True, to start crawling in chunks with alumni.js:doCrawl
-			self.redirect('/?crawled=True')
+				logging.info(user_info)
+				session['uid'] = user_info['id']
+
+				# put user in db (with their authentication information to make requests)
+				user_key = db.Key.from_path('User', session['uid'])
+				user = User(parent=user_key)
+				user.userid = user_info['id']
+				user.uname = user_info['firstName'] + " " + user_info['lastName']
+				user.utoken = access_token
+				# TODO: could put expiration date for token into user, do check for renewal
+				#user.utoken = user_info['token']
+				#user.usecret = user_info['secret']
+				user.put()
+
+				#self.response.out.write(user_info)
+				# Send user to MainPage with crawled=True, to start crawling in chunks with alumni.js:doCrawl
+				self.redirect('/?crawled=True')
+			else:
+				self.redirect('/?crawled=error')
 		else:
 			self.redirect('/?crawled=error')
 
@@ -346,7 +390,7 @@ class DoCrawl(webapp2.RequestHandler):
 			if template:
 				school = template.school
 				robj['N'] = template.N
-				robj['ncrawled'] = template.ncrawled
+				robj['ncrawled'] = template.N_crawled
 			else:
 				robj['error'] = "ERR 400 Template db error, DoCrawl: " + session['template']
 				return self.response.out.write(json.dumps(robj))
@@ -370,24 +414,19 @@ class DoCrawl(webapp2.RequestHandler):
 			for person in person_q.run(limit=npeople):
 			#for person in person_q.run(limit=1):
 				params = {'first-name':person.first_name,'last-name':person.last_name,'school-name':school,'format':'json'}
+				#params = {'first-name':'stephen','last-name':'denton','format':'json'}
 				logging.info("Alum loaded: " + person.last_name)
-				request_url = "http://api.linkedin.com/v1/people-search"
+				request_url = "/v1/people-search"
 				request_url += ":(people:(id,first-name,last-name,industry,location,positions:(title,company)),num-results)"
-				result = client.make_request(url=request_url, 
-					token=user.utoken, 
-					secret=user.usecret,
-					additional_params=params)
-				try:
-					li_person = json.loads(result.content)
-				except:
-					logging.info("Error loading " + person.first_name + " " + person.last_name)
-					logging.info(result.content)
+				li_person = api_fetch(user.utoken,request_url,params)
+				if li_person.has_key('error'):
+					if li_person['error'] == 'Throttled':
+						robj['throttled'] = 'true'
+						return self.response.out.write(json.dumps(robj))
+					else:
+						robj['error'] = "ERR 401, bad response: " + li_person['error']
+						return self.response.out.write(json.dumps(robj))
 				else:
-					# handle throttle limit 
-					if 'people' not in li_person:
-						if 'message' in li_person and li_person['message'][0:8]=="Throttle":
-							robj['throttled'] = 'true'
-							return self.response.out.write(json.dumps(robj))
 					person.n_results = li_person['people']['_total']
 					if person.n_results == 1:
 						alum = li_person['people']['values'][0]
@@ -407,6 +446,7 @@ class DoCrawl(webapp2.RequestHandler):
 								position = Position(parent=person)
 								position.title = 'title' in alum['positions']['values'][i] and alum['positions']['values'][i]['title'] or 'NA'
 								position.company_name = 'name' in alum['positions']['values'][i]['company'] and alum['positions']['values'][i]['company']['name'] or 'NA'
+								position.put()
 					person.is_crawled = True
 					person.put()    
 					robj['ncrawled'] += 1
@@ -512,13 +552,28 @@ class DoViz(webapp2.RequestHandler):
 						industries[person.industry] = 1
 			ilist = [{'industry':r,'freq':round(float(v)/float(total),4)} for r,v in industries.iteritems()]
 			ilist.sort(key=lambda tup: tup['freq'],reverse=True) 
-			logging.info(ilist)
+			# logging.info(ilist)
 			return self.response.out.write(json.dumps(ilist))
+
+		if viz == 'titlecloud':
+			titles = {}
+			total = 0
+			# iterate through positions
+			position_q = Position.all()
+			for position in position_q.run():
+				if position.title in titles:
+					titles[position.title] += 1
+				else:
+					titles[position.title] = 1
+			tlist = [{'title':t,'freq':v} for t,v in titles.iteritems()]
+			tlist.sort(key=lambda tup: tup['freq'],reverse=True) 
+			logging.info(tlist)
+			return self.response.out.write(json.dumps(tlist))
 
 app = webapp2.WSGIApplication([('/', MainPage), 
 	('/loadcontent', LoadContent), 
-	('/initoauth', InitOAuth), 
-	('/oauth', HandleOAuth),  
+	('/initoauth', InitOAuth),  
+	('/oauth', HandleOAuth), 
 	('/crawl', DoCrawl),
 	('/viz', DoViz)], 
 	debug=True)
