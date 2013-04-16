@@ -533,7 +533,7 @@ class DoViz(webapp2.RequestHandler):
 						regions[person.location] = 1
 			rlist = [{'region':r,'freq':round(float(v)/float(total),4)} for r,v in regions.iteritems()]
 			rlist.sort(key=lambda tup: tup['freq'],reverse=True) 
-			#logging.info(rlist)
+			logging.debug(rlist)
 			return self.response.out.write(json.dumps(rlist))
 
 		if viz == 'histindustry':
@@ -552,7 +552,7 @@ class DoViz(webapp2.RequestHandler):
 						industries[person.industry] = 1
 			ilist = [{'industry':r,'freq':round(float(v)/float(total),4)} for r,v in industries.iteritems()]
 			ilist.sort(key=lambda tup: tup['freq'],reverse=True) 
-			# logging.info(ilist)
+			logging.debug(ilist)
 			return self.response.out.write(json.dumps(ilist))
 
 		if viz == 'titlecloud':
@@ -561,13 +561,14 @@ class DoViz(webapp2.RequestHandler):
 			# iterate through positions
 			position_q = Position.all()
 			for position in position_q.run():
-				if position.title in titles:
-					titles[position.title] += 1
-				else:
-					titles[position.title] = 1
-			tlist = [{'title':t,'freq':v} for t,v in titles.iteritems()]
-			tlist.sort(key=lambda tup: tup['freq'],reverse=True) 
-			logging.info(tlist)
+				for word in position.title.split(' '):
+					if word.strip() in titles:
+						titles[word.strip()] += 1
+					else:
+						titles[word.strip()] = 1
+			tlist = [{'text':t,'size':v} for t,v in titles.iteritems()]
+			tlist.sort(key=lambda tup: tup['size'],reverse=True) 
+			logging.debug(tlist)
 			return self.response.out.write(json.dumps(tlist))
 
 app = webapp2.WSGIApplication([('/', MainPage), 

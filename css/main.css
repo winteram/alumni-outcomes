@@ -134,7 +134,6 @@ body
 	padding-top: 30px;
 }
 
-
 .bar {
   fill: steelblue;
 }
@@ -150,8 +149,16 @@ body
   stroke: #000;
   shape-rendering: crispEdges;
 }
-
+.axis text {
+    font-family: sans-serif;
+    font-size: 12px;
+}
 
 .x.axis path {
   display: none;
+}
+
+#titles
+{
+	background-color: white;
 }

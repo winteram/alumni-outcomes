@@ -175,6 +175,15 @@ function doViz()
 
   $.post('/viz',{'viz':'piecountry'}, function(data)
   {
+    var total = 0;
+    otherlist = '<div style="font-weight:bold">Frequencies</div>';
+    for (i=0; i<data.clist.length; i++)
+    {
+      otherlist += '<div class="othercountry">' + data.clist[i].country + ': ' + data.clist[i].freq + '</div>';
+      total += data.clist[i].freq;
+    }
+    $('#countrylist').html(otherlist);
+
     var width = 300,
     height = 250,
     radius = Math.min(width, height) / 2;
@@ -209,14 +218,8 @@ function doViz()
         .attr("transform", function(d) { return "translate(" + arc.centroid(d) + ")"; })
         .attr("dy", "1.5em")
         .style("text-anchor", "middle")
-        .text(function(d) { return d.data.country; });
+        .text(function(d) { return d.data.country + " (" + Math.round(100*d.data.freq / total) + "%)"; });
 
-    otherlist = '<div style="font-weight:bold">Frequencies</div>';
-    for (i=0; i<data.clist.length; i++)
-    {
-      otherlist += '<div class="othercountry">' + data.clist[i].country + ': ' + data.clist[i].freq + '</div>';
-    }
-    $('#countrylist').html(otherlist);
   },"json");
 
   $.post('/viz',{'viz':'histregion'}, function(data)
@@ -354,11 +357,13 @@ function doViz()
   // Helper function for word cloud
   function draw(words) 
   {
+    var fill = d3.scale.category20();
+
     d3.select("#titles").append("svg")
         .attr("width", 600)
         .attr("height", 400)
       .append("g")
-        .attr("transform", "translate(150,150)")
+        .attr("transform", "translate(300,200)")
       .selectAll("text")
         .data(words)
       .enter().append("text")
@@ -375,15 +380,11 @@ function doViz()
   // Visualize Word Cloud
   $.post('/viz',{'viz':'titlecloud'}, function(data)
   {
-    var fill = d3.scale.category20();
-
     d3.layout.cloud().size([600, 400])
-        .words(data.map(function(d) {
-          return {text: d.word, size: d.freq};
-        }))
+        .words(data)
         .rotate(function() { return ~~(Math.random() * 2) * 90; })
         .font("Impact")
-        .fontSize(function(d) { return d.size; })
+        .fontSize(function(d) { return (d.size * 5); })
         .on("end", draw)
         .start();
 
