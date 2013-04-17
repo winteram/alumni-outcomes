@@ -254,7 +254,7 @@ function doViz()
         .attr("y", function(d) { return y(d.region); })
         .attr("height", y.rangeBand())
       .transition()
-        .duration(750)
+        .duration(1500)
         .attr("width",function(d) { return x(d.freq); });
 
     svg.selectAll(".rname")
